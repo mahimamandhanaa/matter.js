@@ -315,7 +315,7 @@ describe("BtpSessionHandler", () => {
             assert.deepEqual(promiseResolver[1], ByteArray.fromHex("0602060504"));
         });
 
-        it("triggered timeout as did not send ack within 5 sec", async () => {
+        it("triggers timeout as did not send ack within 5 sec", async () => {
             const fakeTime = Time.get() as TimeFake;
             const { promise: writeBlePromise, resolver: writeBleResolver } = await getPromiseResolver<ByteArray>();
             const { promise: handleMatterMessagePromise, resolver: handleMatterMessageResolver } = await getPromiseResolver<ByteArray>();
@@ -395,7 +395,7 @@ describe("BtpSessionHandler", () => {
                 await fakeTime.advanceTime(15000);
                 await handleMatterMessagePromise;
                 await disconnectBlePromise;
-            }, BtpProtocolError, "Acknowledgement for the sent sequence number was not received");
+            }, "Acknowledgement for the sent sequence number was not received");
         });
 
         it("payload size and message Length does not match", async () => {
