@@ -360,6 +360,7 @@ describe("BtpSessionHandler", () => {
         it("triggers timeout as did not receive ack within 15 sec", async () => {
             const fakeTime = Time.get() as TimeFake;
             const { promise: disconnectBlePromise, resolver: disconnectBleResolver } = await getPromiseResolver<void>();
+            const { promise: handleMatterMessagePromise, resolver: handleMatterMessageResolver } = await getPromiseResolver<ByteArray>();
 
             const segmentPayload = ByteArray.fromHex("010203040506070809");
             const matterMessage = BtpCodec.encodeBtpPacket({
@@ -378,15 +379,23 @@ describe("BtpSessionHandler", () => {
                     segmentPayload
                 }
             });
+
+            onHandleMatterMessageCallback = (matterMessage: ByteArray) => {
+                handleMatterMessageResolver(matterMessage);
+                void btpSessionHandler?.sendMatterMessage(ByteArray.fromHex("090807060504030201"));
+            };
+
             onDisconnectBleCallback = () => {
                 disconnectBleResolver();
             }
+
             await assert.rejects(async () => {
                 btpSessionHandler?.handleIncomingBleData(matterMessage);
-                await fakeTime.advanceTime(15000);
 
+                await fakeTime.advanceTime(15000);
+                await handleMatterMessagePromise;
                 await disconnectBlePromise;
-            }, BtpProtocolError, "Acknowlege");
+            }, BtpProtocolError, "Acknowledgement for the sent sequence number was not received");
         });
 
         it("payload size and message Length does not match", async () => {
