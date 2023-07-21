@@ -425,5 +425,57 @@ describe("BtpSessionHandler", () => {
             btpSessionHandler?.handleIncomingBleData(matterMessage);
             await disconnectBlePromise;
         });
+
+        it("handles rounding off sequence numbers", async () => {
+            const { promise: writeBlePromise, resolver: writeBleResolver } = await getPromiseResolver<ByteArray>();
+            const { promise: handleMatterMessagePromise, resolver: handleMatterMessageResolver } = await getPromiseResolver<ByteArray>();
+
+            for (let i = 0; i < 257; i++) {
+                const segmentPayload = ByteArray.fromHex("010203040506070809");
+
+                const packet = {
+                    header: {
+                        isHandshakeRequest: false,
+                        hasManagementOpcode: false,
+                        hasAckNumber: true,
+                        isEndingSegment: true,
+                        isContinuingSegment: false,
+                        isBeginningSegment: true
+                    },
+                    payload: {
+                        ackNumber: getSequenceNumber(i - 1),
+                        sequenceNumber: getSequenceNumber(i - 1),
+                        messageLength: segmentPayload.length,
+                        segmentPayload
+                    }
+                };
+                const matterMessage = BtpCodec.encodeBtpPacket(packet);
+
+                onHandleMatterMessageCallback = (matterMessage: ByteArray) => {
+                    handleMatterMessageResolver(matterMessage);
+                    void btpSessionHandler?.sendMatterMessage(ByteArray.fromHex("090807060504030201"));
+                };
+
+                onWriteBleCallback = (dataToWrite: ByteArray) => {
+                    writeBleResolver(dataToWrite);
+                }
+
+                btpSessionHandler?.handleIncomingBleData(matterMessage);
+                const matterHandlerResult = await handleMatterMessagePromise;
+                assert.deepEqual(matterHandlerResult, segmentPayload);
+
+                const result = await writeBlePromise;
+                assert.deepEqual(result, ByteArray.fromHex("0d00010900090807060504030201"));
+            }
+        });
     });
 });
+
+function getSequenceNumber(sequenceNumber: number) {
+    sequenceNumber++;
+    if (sequenceNumber > 255) {
+        sequenceNumber = 0;
+    }
+    return sequenceNumber;
+}
+

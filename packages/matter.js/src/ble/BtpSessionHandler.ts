@@ -23,6 +23,7 @@ const MAXIMUM_BTP_MTU = 247; // Maximum size of BTP segment
 const MAXIMUM_WINDOW_SIZE = 255; // Server maximum window size
 const BTP_ACK_TIMEOUT_MS = 15000; // timer in ms before ack should be sent for a segment
 const BTP_SEND_ACK_TIMEOUT_MS = 5000; // BTP_ACK_TIMEOUT_MS / 3: timer starts when we receive a packet and stops when we sends its ack
+const MAXIMUM_SEQUENCE_NUMBER = 255;
 
 export class BtpSessionHandler {
     private currentIncomingSegmentedMsgLength: number | undefined;
@@ -163,7 +164,7 @@ export class BtpSessionHandler {
 
             if (hasAckNumber && ackNumber !== undefined) {
                 // check that ack number is valid
-                if (ackNumber <= this.prevIncomingAckNumber || ackNumber > this.sequenceNumber) {
+                if (ackNumber <= ((this.prevIncomingAckNumber % MAXIMUM_SEQUENCE_NUMBER) - 1) || ackNumber > this.sequenceNumber) {
                     throw new BtpProtocolError(`Invalid Ack Number, Ack Number: ${ackNumber}, Sequence Number: ${this.sequenceNumber}, Previous AckNumber: ${this.prevIncomingAckNumber}`);
                 }
 
@@ -240,7 +241,7 @@ export class BtpSessionHandler {
     private async processSendQueue() {
         if (this.sendInProgress) return;
 
-        if (this.sequenceNumber - this.prevIncomingAckNumber > (this.clientWindowSize - 1)) return;
+        if (this.calculateWindowSize(this.prevIncomingAckNumber) > (this.clientWindowSize - 1)) return;
 
         if (this.queuedOutgoingMatterMessages.length === 0) return;
 
@@ -309,7 +310,7 @@ export class BtpSessionHandler {
             }
 
             // If the window is full, stop sending for now
-            if (this.sequenceNumber - this.prevIncomingAckNumber > (this.clientWindowSize - 1)) {
+            if (this.calculateWindowSize(this.prevIncomingAckNumber) > (this.clientWindowSize - 1)) {
                 break;
             }
         }
@@ -364,16 +365,23 @@ export class BtpSessionHandler {
      */
     private btpAckTimeoutTriggered() {
         if (this.prevIncomingAckNumber !== this.sequenceNumber) {
+            logger.warn("Acknowledgement for the sent sequence number was not received ... disconnect");
             this.close()
-            throw new BtpProtocolError("Acknowledgement for the sent sequence number was not received");
         }
     }
 
-    private getNextSequenceNumber() {
+    getNextSequenceNumber() {
         this.sequenceNumber++;
-        if (this.sequenceNumber > 255) {
+        if (this.sequenceNumber > MAXIMUM_SEQUENCE_NUMBER) {
             this.sequenceNumber = 0;
         }
         return this.sequenceNumber;
+    }
+
+    private calculateWindowSize(prevIncomingAckNumber: number): number {
+        if (prevIncomingAckNumber > this.sequenceNumber) {
+            prevIncomingAckNumber = prevIncomingAckNumber - MAXIMUM_SEQUENCE_NUMBER - 1;
+        }
+        return this.sequenceNumber - prevIncomingAckNumber;
     }
 }
