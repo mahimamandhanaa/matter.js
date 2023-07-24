@@ -10,6 +10,7 @@ import { NetInterface } from "./NetInterface.js";
 import { Listener } from "../common/TransportInterface.js";
 import { Network } from './Network.js';
 import { ByteArray } from "../util/ByteArray.js";
+import { ServerAddress } from "../common/index.js";
 
 export class UdpInterface implements NetInterface {
 
@@ -21,14 +22,18 @@ export class UdpInterface implements NetInterface {
         private readonly server: UdpChannel,
     ) { }
 
-    async openChannel(host: string, port: number) {
-        return Promise.resolve(new UdpConnection(this.server, host, port));
+    async openChannel(address: ServerAddress) {
+        if (address.type !== "udp") {
+            throw new Error(`Unsupported address type ${address.type}`);
+        }
+        const { ip, port } = address;
+        return Promise.resolve(new UdpConnection(this.server, ip, port));
     }
 
     onData(listener: (channel: Channel<ByteArray>, messageBytes: ByteArray) => void): Listener {
-        return this.server.onData((_netInterface, peerAddress, peerPort, data) => listener(new UdpConnection(this.server, peerAddress, peerPort), data));
+        return this.server.onData((_netInterface, peerHost, peerPort, data) => listener(new UdpConnection(this.server, peerHost, peerPort), data));
     }
-    close() {
+    async close() {
         this.server.close();
     }
 }
@@ -46,5 +51,9 @@ class UdpConnection implements Channel<ByteArray> {
 
     getName() {
         return `udp://${this.peerAddress}:${this.peerPort}`;
+    }
+
+    async close() {
+        // UDP is connectionless, so nothing to do here
     }
 }
