@@ -164,7 +164,7 @@ export class BtpSessionHandler {
 
             if (hasAckNumber && ackNumber !== undefined) {
                 // check that ack number is valid
-                if (ackNumber > this.sequenceNumber || this.calculateWindowSize(this.prevIncomingAckNumber, ackNumber) > (this.clientWindowSize - 1)) {
+                if (ackNumber > this.sequenceNumber || this.exceedsWindowSize(this.prevIncomingAckNumber, ackNumber)) {
                     throw new BtpProtocolError(`Invalid Ack Number, Ack Number: ${ackNumber}, Sequence Number: ${this.sequenceNumber}, Previous AckNumber: ${this.prevIncomingAckNumber}`);
                 }
 
@@ -241,7 +241,7 @@ export class BtpSessionHandler {
     private async processSendQueue() {
         if (this.sendInProgress) return;
 
-        if (this.calculateWindowSize(this.prevIncomingAckNumber, this.sequenceNumber) > (this.clientWindowSize - 1)) return;
+        if (this.exceedsWindowSize(this.prevIncomingAckNumber, this.sequenceNumber)) return;
 
         if (this.queuedOutgoingMatterMessages.length === 0) return;
 
@@ -310,7 +310,7 @@ export class BtpSessionHandler {
             }
 
             // If the window is full, stop sending for now
-            if (this.calculateWindowSize(this.prevIncomingAckNumber, this.sequenceNumber) > (this.clientWindowSize - 1)) {
+            if (this.exceedsWindowSize(this.prevIncomingAckNumber, this.sequenceNumber)) {
                 break;
             }
         }
@@ -382,12 +382,12 @@ export class BtpSessionHandler {
     }
 
     /**
-     * Returns the difference between the incoming ackNumber and sent sequence number. 
+     * Checks if incoming ackNumber and sent sequence number exceeds the client window size or not.
      */
-    private calculateWindowSize(prevIncomingAckNumber: number, currentSequenceNumber: number): number {
+    private exceedsWindowSize(prevIncomingAckNumber: number, currentSequenceNumber: number): boolean {
         if (prevIncomingAckNumber > currentSequenceNumber) {
             prevIncomingAckNumber = (prevIncomingAckNumber % MAXIMUM_SEQUENCE_NUMBER) - 1;
         }
-        return Math.abs(currentSequenceNumber - prevIncomingAckNumber);
+        return (currentSequenceNumber - prevIncomingAckNumber) > (this.clientWindowSize - 1);
     }
 }
