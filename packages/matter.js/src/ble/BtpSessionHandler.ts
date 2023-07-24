@@ -164,7 +164,7 @@ export class BtpSessionHandler {
 
             if (hasAckNumber && ackNumber !== undefined) {
                 // check that ack number is valid
-                if (ackNumber <= ((this.prevIncomingAckNumber % MAXIMUM_SEQUENCE_NUMBER) - 1) || ackNumber > this.sequenceNumber) {
+                if (ackNumber > this.sequenceNumber || this.calculateWindowSize(this.prevIncomingAckNumber, ackNumber) > (this.clientWindowSize - 1)) {
                     throw new BtpProtocolError(`Invalid Ack Number, Ack Number: ${ackNumber}, Sequence Number: ${this.sequenceNumber}, Previous AckNumber: ${this.prevIncomingAckNumber}`);
                 }
 
@@ -241,7 +241,7 @@ export class BtpSessionHandler {
     private async processSendQueue() {
         if (this.sendInProgress) return;
 
-        if (this.calculateWindowSize(this.prevIncomingAckNumber) > (this.clientWindowSize - 1)) return;
+        if (this.calculateWindowSize(this.prevIncomingAckNumber, this.sequenceNumber) > (this.clientWindowSize - 1)) return;
 
         if (this.queuedOutgoingMatterMessages.length === 0) return;
 
@@ -310,7 +310,7 @@ export class BtpSessionHandler {
             }
 
             // If the window is full, stop sending for now
-            if (this.calculateWindowSize(this.prevIncomingAckNumber) > (this.clientWindowSize - 1)) {
+            if (this.calculateWindowSize(this.prevIncomingAckNumber, this.sequenceNumber) > (this.clientWindowSize - 1)) {
                 break;
             }
         }
@@ -370,6 +370,9 @@ export class BtpSessionHandler {
         }
     }
 
+    /**
+     * Increments sequence number for the packets and round it off to 0 when it reaches the maximum limit.
+     */
     getNextSequenceNumber() {
         this.sequenceNumber++;
         if (this.sequenceNumber > MAXIMUM_SEQUENCE_NUMBER) {
@@ -378,10 +381,13 @@ export class BtpSessionHandler {
         return this.sequenceNumber;
     }
 
-    private calculateWindowSize(prevIncomingAckNumber: number): number {
-        if (prevIncomingAckNumber > this.sequenceNumber) {
-            prevIncomingAckNumber = prevIncomingAckNumber - MAXIMUM_SEQUENCE_NUMBER - 1;
+    /**
+     * Returns the difference between the incoming ackNumber and sent sequence number. 
+     */
+    private calculateWindowSize(prevIncomingAckNumber: number, currentSequenceNumber: number): number {
+        if (prevIncomingAckNumber > currentSequenceNumber) {
+            prevIncomingAckNumber = (prevIncomingAckNumber % MAXIMUM_SEQUENCE_NUMBER) - 1;
         }
-        return this.sequenceNumber - prevIncomingAckNumber;
+        return Math.abs(currentSequenceNumber - prevIncomingAckNumber);
     }
 }
